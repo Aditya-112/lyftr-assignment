@@ -4,7 +4,13 @@ Lyftr Chat is a multi-turn LLM chatbot with deterministic API-key failover and e
 
 ## Live URLs
 
-The source is available in the [public GitHub repository](https://github.com/Aditya-112/lyftr-assignment). Hosted frontend and backend URLs are pending. The verified local frontend is `http://localhost:3000` and the backend is `http://localhost:8000`.
+- **Public frontend:** [Lyftr Chat on Cloudflare Pages](https://lyftr-assignment.pages.dev/)
+- **Temporary public API:** `https://closing-accent-slideshow-telescope.trycloudflare.com` · [Health endpoint](https://closing-accent-slideshow-telescope.trycloudflare.com/health)
+- **Source:** [Public GitHub repository](https://github.com/Aditya-112/lyftr-assignment)
+
+The public demo uses a Cloudflare Quick Tunnel to a dedicated Docker container on the development machine. Conversation state lives in the named SQLite volume `lyftr_assignment_public_demo_data` at `/data`. The API URL requires the machine, container, and tunnel to stay running. A new Quick Tunnel gets a new hostname and requires a frontend rebuild. Railway reported that the only authorized workspace was on Hobby, so no Railway resources were created. [Cloudflare Quick Tunnel limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/#limitations)
+
+To take the temporary API offline, stop the tunnel or run `docker stop lyftr-public-demo-backend`. The demo's named volume retains its SQLite file.
 
 ### Zero-cost hosting options
 
@@ -19,12 +25,11 @@ The source is available in the [public GitHub repository](https://github.com/Adi
 
 1. In an authorized **Railway Free** workspace, create one backend service from the public GitHub repository. Use `backend` as the service root, build with its Dockerfile, and set the health check to `/health`. Generate a public HTTPS domain for port `8000`. Keep one replica and confirm that the workspace is on the Free plan, which stops services when its included resource allowance runs out. [Railway Free plan](https://docs.railway.com/pricing/free-plan)
 2. Attach the included 0.5 GB volume at `/data`. Set `DATABASE_URL=sqlite:////data/app.db` and `RAILWAY_RUN_UID=0` so the service can write to Railway's root-owned volume. Put two valid Gemini keys in the backend's sealed `LLM_API_KEYS` variable. Set `LLM_MODEL=gemini/gemini-3.1-flash-lite`, `ENABLE_FAILURE_SIMULATION=true`, and `PORT=8000`. Set `ALLOWED_ORIGINS` to the exact HTTPS Pages origin once assigned. Use `http://localhost:3000` for initial backend verification. [Railway volume permissions](https://docs.railway.com/volumes#permissions)
-3. Create a **Cloudflare Pages Free** project using Direct Upload. Build with Node.js 24 and the verified Railway HTTPS origin in `API`. Use the same project name and production branch for creation and deployment. [Cloudflare Pages Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)
+3. Use the existing **Cloudflare Pages Free** Direct Upload project, `lyftr-assignment`. Build with Node.js 24 and the verified Railway HTTPS origin in `API`. [Cloudflare Pages Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)
 
    ```bash
    npm --prefix frontend ci --include=dev
    VITE_API_BASE_URL="$API" npm --prefix frontend run build
-   wrangler pages project create lyftr-assignment --production-branch main --force
    wrangler pages deploy frontend/dist --project-name lyftr-assignment --branch main
    ```
 
@@ -131,10 +136,10 @@ The backend tests replace the provider's HTTP response and exercise the real Lit
 
 ## Verification: how to see failover, cache hits and per-message token usage
 
-Set `API` to the deployed backend HTTPS URL for the demo or to `http://localhost:8000` for local verification. The commands use `curl` and `jq`. Run the block once per demo so the timestamp gives the first request a fresh cache identity.
+The commands use `curl` and `jq`. For local verification, set `API=http://localhost:8000`. Run the block once per demo so the timestamp gives the first request a fresh cache identity.
 
 ```bash
-export API='http://localhost:8000'
+export API='https://closing-accent-slideshow-telescope.trycloudflare.com'
 STAMP="$(date +%s)-$$"
 PROMPT="In one sentence, explain how caching saves time. Demo reference $STAMP."
 
@@ -156,7 +161,7 @@ curl -i "$API/sessions/unavailable-$STAMP/messages"
 curl -fsS "$API/sessions/live-$STAMP/messages" | jq
 ```
 
-The first two calls should show `LIVE_INFERENCE` and `LLM_CACHE` with identical replies and per-turn token usage. The cache hit reports `key_id: null` and zero fallback attempts. The next two calls use the same prompt on purpose and should return real answers from `key_2` despite the warm cache. With two keys, both all-failed cases return HTTP 503 and `{"detail":"all providers unavailable"}`. History for the failed session returns HTTP 404.
+The first two calls showed `LIVE_INFERENCE` and `LLM_CACHE` with identical replies and per-turn token usage. The cache hit reports `key_id: null` and zero fallback attempts. The next two calls reuse the prompt to demonstrate bypass of the warm cache. An authorized secondary key returns HTTP 200 with `key_id: "key_2"`. In the verified deployment, Google denied completions for the configured secondary key with HTTP 403, so these calls returned HTTP 503. Both forced all-key failures return `{"detail":"all providers unavailable"}`. History for a failed new session returns HTTP 404.
 
 Show multi-turn memory and isolate an independent session using the same follow-up wording.
 
@@ -171,7 +176,7 @@ To verify the named Docker volume, run `make down` then `make up` and fetch `/se
 
 ### Automated live verification
 
-The script expects real Gemini replies. Use `--extended` for all four simulation codes. Save a history snapshot to verify restart persistence on Docker or a hosted volume.
+The strict verifier expects real replies from both Gemini keys. Its successful-failover assertion remains blocked while Google rejects the secondary credential. Use `--extended` for all four simulation codes. Save a history snapshot to verify restart persistence.
 
 ```bash
 python3 scripts/verify_live.py http://localhost:8000 --extended --write-history /tmp/lyftr-history.json
@@ -182,19 +187,19 @@ python3 scripts/verify_live.py http://localhost:8000 --check-history /tmp/lyftr-
 
 ### Demo recording (2–3 minutes)
 
-Record your screen with your own narration and share the finished video link. Prepare the command block and wake the Railway service before recording. Keep the local Docker restart check available as separate evidence of local persistence.
+Record your screen with your own narration and share the finished video link. Check the public health endpoint before recording. The temporary backend requires the tunnel and Docker container to remain running. Describe the secondary-key 503 accurately if Google still rejects that credential.
 
 | Time | Show |
 | --- | --- |
 | 0:00–0:35 | Open the deployed frontend. Send “My favorite language is Python.” Ask “What is my favorite language?” Point to the model, resolution source, latency, and input/output token counts. |
 | 0:35–1:15 | In a terminal with `API` set to the public backend, show `/health`. Run the live and cache calls from the smoke block and compare replies, elapsed times, and key IDs. |
-| 1:15–1:55 | Run `key_1=429` against the warmed prompt. Show the real answer and `key_2`, then run `*=429` and show the HTTP 503 and 404 history result. |
-| 1:55–2:30 | Show the successful history response. Explain how FastAPI reads SQLite context, routes through LiteLLM, and saves each turn atomically. Point to the `/data` volume in Compose. |
+| 1:15–1:55 | Run `key_1=429` against the warmed prompt. Show the secondary-key result, then run `*=429` and show the exact HTTP 503 and 404 history result. |
+| 1:55–2:30 | Show the successful history response. Explain how FastAPI reads SQLite context, routes through LiteLLM, and saves each turn atomically. Point to the `/data` volume and describe the public history check after the demo container restarted. |
 
 ### Submission checklist
 
 - [ ] Confirm the public GitHub repository and both verified HTTPS URLs open in a signed-out browser.
-- [ ] Run the live verifier, restart Railway, and compare the saved history over HTTPS.
+- [ ] Run the live verifier after restoring secondary-key access, restart the backend, and compare the saved history over HTTPS.
 - [ ] Record the 2–3 minute walkthrough with your own narration and verify the video link is accessible.
 - [ ] Submit the repository, frontend, backend, and recording links with the verified persistence status.
 
@@ -208,24 +213,25 @@ The workspace includes an optional system prompt editor, Markdown replies, and a
 
 ## Requirement audit
 
-Verification recorded on 21 November 2026. Provider HTTP fixtures drive the application tests. They exercise the real LiteLLM adapter and cache.
+Verification recorded on 21 November 2026. The automated suites use provider HTTP fixtures. Public and local smoke checks used real Gemini inference for the working primary key.
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
-| Configuration and repository secret hygiene | PASS | `.env` has mode `0600` and is Git-ignored. The audit found no credential matches in 38 Git objects, 32 tracked files, 8 frontend build files, and 18 layers across the two Docker images. |
-| Both Gemini keys verified independently | BLOCKED | Verification with two rotated credentials is pending. |
+| Configuration and repository secret hygiene | PASS | `.env` has mode `0600` and is Git-ignored. The audit found no credential matches in Git objects, tracked files, frontend builds, 18 image layers, or inspected runtime logs. |
+| Both Gemini keys verified independently | FAIL | `key_1` returned an uncached Gemini completion with 8 input and 2 output tokens. Google returned HTTP 403 when `key_2` attempted a completion. |
 | FastAPI endpoint shapes and input validation | PASS | Backend tests cover the three endpoints, metadata, CORS preflight, 422 validation, 404 history, and JSON errors. |
 | Inference, ordered fallbacks, and simulation | PASS | Provider fixtures cover primary success, 429, quota, 500/502/503, flag-off behavior, a warm-cache bypass, and exact 503 responses with no history writes. |
-| Real Gemini inference and end-to-end failover | BLOCKED | Needs two usable replacement Gemini keys. |
-| LiteLLM exact-match cache and per-request usage | PASS | Backend tests compare live and cached content and token counts, count provider calls, and vary messages, system prompts, and history. |
-| SQLite history, conversation isolation, and atomic writes | PASS | Tests verify ordered history, context, separate sessions, and rollback. Docker returned an identical stored history response after container restart and a separate down/up cycle. |
+| Real Gemini primary inference | PASS | Real `key_1` inference works locally and over HTTPS. |
+| Successful live secondary failover | BLOCKED | Simulated primary 429 and 500 bypassed the warm cache. The secondary denial resulted in exact 503s and unchanged history. The fixture suite verifies successful fallback. |
+| LiteLLM exact-match cache and per-request usage | PASS | The same prompt in different sessions returned identical replies and token counts over HTTPS. One live request took 1,606 ms and the cache hit took 1 ms, with 28 input and 48 output tokens in both. |
+| SQLite history, conversation isolation, and atomic writes | PASS | Real requests verified recall, separate sessions, chronological order, and higher input-token counts for stored context. Local and public demo history snapshots matched after controlled container restarts. |
 | Docker Engine, image builds, and Compose | PASS | Docker Engine 29.9.3, `docker compose config --quiet`, `make up`, and `make down` were verified. Both localhost URLs responded. |
-| React contract and responsive browser UI | PASS | TypeScript and the production build passed. The Docker-hosted browser showed the API connection, prompt selection, and a 390 px layout with no horizontal overflow. |
+| React contract and responsive browser UI | PASS | TypeScript and both builds passed. The public browser displayed real Gemini replies and cache metadata, cleared the input, and showed a styled 390 px layout with no horizontal overflow. |
 | Automated regression checks | PASS | 33 backend tests and 9 frontend tests passed. |
 | Public GitHub publication | PASS | GitHub confirmed that `Aditya-112/lyftr-assignment` is public and received the source branch. |
 | Railway Free memory limit | PASS | The local backend peaked at 238.8 MB under a 500 MB Docker cgroup cap during startup, a cache hit, and 12 concurrent fixture-backed requests. Railway build, runtime memory, and credit usage need public verification. |
-| Cloudflare Pages Free project setup | PASS | The `lyftr-assignment` Direct Upload project exists and is ready for the frontend build configured with the Railway API origin. |
-| Hosted frontend and backend, CORS, real API calls | BLOCKED | Requires rotated keys and authorization for a Railway Free workspace. |
-| Hosted SQLite persistence | NOT VERIFIED | A Railway volume and restart verification are pending. |
+| Cloudflare Pages Free deployment | PASS | The production Pages hostname served the app and connected to the temporary HTTPS API through the configured CORS origin. |
+| Public demo API and SQLite persistence | PASS | Public HTTP checks covered health, chat, cache, errors, and history. The same HTTPS history response survived a controlled restart of the backend container. |
+| Railway Free deployment and Railway-hosted SQLite | BLOCKED | Railway reported Hobby as the only authorized workspace. No Railway services or volumes were created. |
 | Zero-cost boundary | PASS | No paid hosting resources or billing changes were made. |
 | Demo and submission preparation | PASS | Commands and a timed walkthrough are ready. Candidate narration, recording, and submission remain pending. |
