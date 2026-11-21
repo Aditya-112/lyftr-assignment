@@ -4,7 +4,7 @@ Lyftr Chat is a multi-turn LLM chatbot with deterministic API-key failover and e
 
 ## Live URLs
 
-The public GitHub repository and hosted URLs are pending. The verified local frontend is `http://localhost:3000` and the backend is `http://localhost:8000`.
+The source is available in the [public GitHub repository](https://github.com/Aditya-112/lyftr-assignment). Hosted frontend and backend URLs are pending. The verified local frontend is `http://localhost:3000` and the backend is `http://localhost:8000`.
 
 ### Zero-cost hosting options
 
@@ -200,7 +200,7 @@ Verification recorded on 21 November 2026. Provider HTTP fixtures drive the appl
 | Requirement | Status | Evidence |
 | --- | --- | --- |
 | Configuration and repository secret hygiene | PASS | `.env` has mode `0600` and is Git-ignored. The tracked example contains placeholders. |
-| Both Gemini keys verified independently | BLOCKED | Replacement Free Tier credentials are pending after the original pair was exposed. |
+| Both Gemini keys verified independently | BLOCKED | Verification with two approved Free Tier credentials is pending. |
 | FastAPI endpoint shapes and input validation | PASS | Backend tests cover the three endpoints, metadata, CORS preflight, 422 validation, 404 history, and JSON errors. |
 | Inference, ordered fallbacks, and simulation | PASS | Provider fixtures cover primary success, 429, quota, 500/502/503, flag-off behavior, a warm-cache bypass, and exact 503 responses with no history writes. |
 | Real Gemini inference and end-to-end failover | BLOCKED | Needs two usable Free Tier keys. |
@@ -209,7 +209,7 @@ Verification recorded on 21 November 2026. Provider HTTP fixtures drive the appl
 | Docker Engine, image builds, and Compose | PASS | Docker Engine 29.9.3, `docker compose config --quiet`, `make up`, and `make down` were verified. Both localhost URLs responded. |
 | React contract and responsive browser UI | PASS | TypeScript and the production build passed. The Docker-hosted browser showed the API connection, prompt selection, and a 390 px layout with no horizontal overflow. |
 | Automated regression checks | PASS | 33 backend tests and 9 frontend tests passed. |
-| Public GitHub publication | BLOCKED | GitHub CLI device authorization is pending. |
+| Public GitHub publication | PASS | GitHub confirmed that `Aditya-112/lyftr-assignment` is public and received the source branch. |
 | Hosted frontend and backend, CORS, real API calls | BLOCKED | Requires provider keys, authenticated publishing, and authorized hosting with a verified zero-cost cap. |
 | Hosted SQLite persistence | NOT VERIFIED | No disk-backed public instance was provisioned. Render Free has ephemeral storage. |
 | Zero-cost boundary | PASS | No paid hosting resources or billing changes were made. |
