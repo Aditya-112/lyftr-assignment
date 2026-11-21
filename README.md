@@ -15,14 +15,20 @@ The source is available in the [public GitHub repository](https://github.com/Adi
 | Oracle Cloud Always Free | An eligible VM and boot volume can retain SQLite. | Requires an eligible, accessible tenancy. New-account verification requires a card. [Oracle Free Tier FAQ](https://www.oracle.com/cloud/free/faq/) |
 | Cloudflare Quick Tunnels to local Docker | The existing named volume retains SQLite while the local machine runs Docker. | The hostnames change when the tunnel processes restart. Suitable for a scheduled demo. [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) |
 
-### Deploy a free preview
+### Deploy on Railway Free and Cloudflare Pages Free
 
-1. Publish the sanitized project to a public GitHub repository with the authenticated GitHub CLI. Only `.env.example` should be tracked. Keep provider keys in the private `.env` file or in the hosting provider's secret editor.
-2. For **Railway Free**, use the `backend` directory as the service root and the backend Dockerfile to build it. Set Health Check Path to `/health`, attach the included volume at `/data`, set `DATABASE_URL=sqlite:////data/app.db`, and generate a public HTTPS domain. Railway documents `RAILWAY_RUN_UID=0` for access to volumes by an image configured with a non-root user. Use an authorized Free workspace and confirm outbound Gemini access before treating the deployment as usable. [Railway volume permissions](https://docs.railway.com/volumes#permissions)
-3. For the **Render Free fallback**, use a Hobby workspace with no payment method and create a **Free Web Service** using the Docker runtime. Set Root Directory to `backend`, Dockerfile Path to `./Dockerfile`, Build Context to `.`, and Health Check Path to `/health`. Set `DATABASE_URL=sqlite:////tmp/lyftr/app.db`. SQLite history on this preview lasts until the service sleeps, restarts, or redeploys.
-4. On either backend, set `LLM_API_KEYS` from two Gemini Free Tier projects in its secret editor, `LLM_MODEL=gemini/gemini-3.1-flash-lite`, `ENABLE_FAILURE_SIMULATION=true`, and `ALLOWED_ORIGINS` to the exact HTTPS frontend origin. Use `http://localhost:3000` until the frontend's hostname is assigned. Leave the backend at one instance. [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing)
-5. Create a **Cloudflare Pages** or **Render Static Site** on the free plan. Use Root Directory `frontend`, Build Command `npm ci --include=dev && npm run build`, Publish Directory `dist`, and Node.js 24. Set `VITE_API_BASE_URL` to the backend's public HTTPS URL. Update the backend's allowed origin when the frontend URL is assigned.
-6. Run the verification script below against the public API and send a turn from the hosted browser UI. If the backend has a volume, snapshot history, restart it, and compare the snapshot. Report the actual verified URLs and the applicable persistence limitation.
+1. In an authorized **Railway Free** workspace, create one backend service from the public GitHub repository. Use `backend` as the service root, build with its Dockerfile, and set the health check to `/health`. Generate a public HTTPS domain for port `8000`. Keep one replica and confirm that the workspace is on the Free plan, which stops services when its included resource allowance runs out. [Railway Free plan](https://docs.railway.com/pricing/free-plan)
+2. Attach the included 0.5 GB volume at `/data`. Set `DATABASE_URL=sqlite:////data/app.db` and `RAILWAY_RUN_UID=0` so the service can write to Railway's root-owned volume. Put two valid Gemini keys in the backend's sealed `LLM_API_KEYS` variable. Set `LLM_MODEL=gemini/gemini-3.1-flash-lite`, `ENABLE_FAILURE_SIMULATION=true`, and `PORT=8000`. Set `ALLOWED_ORIGINS` to the exact HTTPS Pages origin once assigned. Use `http://localhost:3000` for initial backend verification. [Railway volume permissions](https://docs.railway.com/volumes#permissions)
+3. Create a **Cloudflare Pages Free** project using Direct Upload. Build with Node.js 24 and the verified Railway HTTPS origin in `API`. Use the same project name and production branch for creation and deployment. [Cloudflare Pages Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)
+
+   ```bash
+   npm --prefix frontend ci --include=dev
+   VITE_API_BASE_URL="$API" npm --prefix frontend run build
+   wrangler pages project create lyftr-assignment --production-branch main --force
+   wrangler pages deploy frontend/dist --project-name lyftr-assignment --branch main
+   ```
+
+4. Update Railway's allowed origin to the verified Pages hostname. Run the live verification script, send a chat turn from the deployed frontend, and check Railway's actual usage. Save a history snapshot, restart the backend, and compare the snapshot over HTTPS.
 
 ### Temporary public demo with local SQLite
 
@@ -47,7 +53,7 @@ Run `make up` without the tunnel overrides after the demo to restore the local f
 
 ## Run locally: with Docker and without
 
-Use two separate Google AI Studio Free Tier projects for independent quotas. Copy the template and put the keys in the private `.env` file. The public template contains placeholders.
+Use two valid Gemini API keys, ideally from different Google AI Studio projects for independent quotas. Copy the template and put the keys in the private `.env` file. The public template contains placeholders.
 
 ```bash
 cp -n .env.example .env
@@ -176,7 +182,7 @@ python3 scripts/verify_live.py http://localhost:8000 --check-history /tmp/lyftr-
 
 ### Demo recording (2–3 minutes)
 
-Record your screen with your own narration and share the finished video link. Prepare the command block and warm up the deployed service before recording. If using the Render Free preview, state that its SQLite history can disappear and use the local restart check to demonstrate the named volume.
+Record your screen with your own narration and share the finished video link. Prepare the command block and wake the Railway service before recording. Keep the local Docker restart check available as separate evidence of local persistence.
 
 | Time | Show |
 | --- | --- |
@@ -184,6 +190,13 @@ Record your screen with your own narration and share the finished video link. Pr
 | 0:35–1:15 | In a terminal with `API` set to the public backend, show `/health`. Run the live and cache calls from the smoke block and compare replies, elapsed times, and key IDs. |
 | 1:15–1:55 | Run `key_1=429` against the warmed prompt. Show the real answer and `key_2`, then run `*=429` and show the HTTP 503 and 404 history result. |
 | 1:55–2:30 | Show the successful history response. Explain how FastAPI reads SQLite context, routes through LiteLLM, and saves each turn atomically. Point to the `/data` volume in Compose. |
+
+### Submission checklist
+
+- [ ] Confirm the public GitHub repository and both verified HTTPS URLs open in a signed-out browser.
+- [ ] Run the live verifier, restart Railway, and compare the saved history over HTTPS.
+- [ ] Record the 2–3 minute walkthrough with your own narration and verify the video link is accessible.
+- [ ] Submit the repository, frontend, backend, and recording links with the verified persistence status.
 
 ## Setup Used: your editor and AI tools
 
@@ -199,18 +212,20 @@ Verification recorded on 21 November 2026. Provider HTTP fixtures drive the appl
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
-| Configuration and repository secret hygiene | PASS | `.env` has mode `0600` and is Git-ignored. The tracked example contains placeholders. |
-| Both Gemini keys verified independently | BLOCKED | Verification with two approved Free Tier credentials is pending. |
+| Configuration and repository secret hygiene | PASS | `.env` has mode `0600` and is Git-ignored. The audit found no credential matches in 38 Git objects, 32 tracked files, 8 frontend build files, and 18 layers across the two Docker images. |
+| Both Gemini keys verified independently | BLOCKED | Verification with two rotated credentials is pending. |
 | FastAPI endpoint shapes and input validation | PASS | Backend tests cover the three endpoints, metadata, CORS preflight, 422 validation, 404 history, and JSON errors. |
 | Inference, ordered fallbacks, and simulation | PASS | Provider fixtures cover primary success, 429, quota, 500/502/503, flag-off behavior, a warm-cache bypass, and exact 503 responses with no history writes. |
-| Real Gemini inference and end-to-end failover | BLOCKED | Needs two usable Free Tier keys. |
+| Real Gemini inference and end-to-end failover | BLOCKED | Needs two usable replacement Gemini keys. |
 | LiteLLM exact-match cache and per-request usage | PASS | Backend tests compare live and cached content and token counts, count provider calls, and vary messages, system prompts, and history. |
 | SQLite history, conversation isolation, and atomic writes | PASS | Tests verify ordered history, context, separate sessions, and rollback. Docker returned an identical stored history response after container restart and a separate down/up cycle. |
 | Docker Engine, image builds, and Compose | PASS | Docker Engine 29.9.3, `docker compose config --quiet`, `make up`, and `make down` were verified. Both localhost URLs responded. |
 | React contract and responsive browser UI | PASS | TypeScript and the production build passed. The Docker-hosted browser showed the API connection, prompt selection, and a 390 px layout with no horizontal overflow. |
 | Automated regression checks | PASS | 33 backend tests and 9 frontend tests passed. |
 | Public GitHub publication | PASS | GitHub confirmed that `Aditya-112/lyftr-assignment` is public and received the source branch. |
-| Hosted frontend and backend, CORS, real API calls | BLOCKED | Requires provider keys, authenticated publishing, and authorized hosting with a verified zero-cost cap. |
-| Hosted SQLite persistence | NOT VERIFIED | No disk-backed public instance was provisioned. Render Free has ephemeral storage. |
+| Railway Free memory limit | PASS | The local backend peaked at 238.8 MB under a 500 MB Docker cgroup cap during startup, a cache hit, and 12 concurrent fixture-backed requests. Railway build, runtime memory, and credit usage need public verification. |
+| Cloudflare Pages Free project setup | PASS | The `lyftr-assignment` Direct Upload project exists and is ready for the frontend build configured with the Railway API origin. |
+| Hosted frontend and backend, CORS, real API calls | BLOCKED | Requires rotated keys and authorization for a Railway Free workspace. |
+| Hosted SQLite persistence | NOT VERIFIED | A Railway volume and restart verification are pending. |
 | Zero-cost boundary | PASS | No paid hosting resources or billing changes were made. |
 | Demo and submission preparation | PASS | Commands and a timed walkthrough are ready. Candidate narration, recording, and submission remain pending. |
