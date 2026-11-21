@@ -1,0 +1,8 @@
+fastapi==0.165.0
+litellm==1.108.13
+openai==3.57.0
+orjson==3.13.0
+pydantic==2.14.4
+python-dotenv==1.2.4
+soundfile==0.14.0
+uvicorn==0.54.0
